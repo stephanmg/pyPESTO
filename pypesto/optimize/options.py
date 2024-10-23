@@ -30,6 +30,8 @@ class OptimizeOptions(dict):
         report_sres: bool = True,
         report_hess: bool = True,
         history_beats_optimizer: bool = True,
+        filename_p: str = '',
+        timestamp_p: float = float(0)
     ):
         super().__init__()
 
@@ -37,6 +39,8 @@ class OptimizeOptions(dict):
         self.report_sres: bool = report_sres
         self.report_hess: bool = report_hess
         self.history_beats_optimizer: bool = history_beats_optimizer
+        self.filename_path: str = filename_p
+        self.timestamp: float = timestamp_p
 
     def __getattr__(self, key):
         try:
