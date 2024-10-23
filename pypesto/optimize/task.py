@@ -59,7 +59,7 @@ class OptimizerTask(Task):
         # init fval stored and create a thread specific h5 file for results
         init_fval = self.problem.objective.get_fval(self.x0)
         idp = MPI.COMM_WORLD.Get_rank()
-        run_file = self.optimize_options.filename_path + f'_id{idp}.h5'$
+        run_file = self.optimize_options.filename_path + f'_id{idp}.h5'
 
         if not os.path.isfile(run_file):
              with h5py.File(run_file, 'a') as f:
