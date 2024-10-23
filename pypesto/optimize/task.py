@@ -1,6 +1,7 @@
 import logging
 
 import numpy as np
+import mpi4py
 
 import pypesto.optimize
 
