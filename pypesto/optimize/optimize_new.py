@@ -5,6 +5,7 @@ from warnings import warn
 from mpi4py.futures import MPIPoolExecutor
 from concurrent.futures import as_completed
 import time
+from mpi4py import MPI
 
 from ..engine import Engine, SingleCoreEngine
 from ..history import HistoryOptions
@@ -25,6 +26,7 @@ from .util import (
 logger = logging.getLogger(__name__)
 
 def create_task(task_id, optimizer, problem, startpoints, ids, history_options, options):
+    """ Create optimization task """
     return OptimizerTask(
             optimizer=optimizer,
             problem=problem,
@@ -47,7 +49,7 @@ def minimize_new(
     filename: Union[str, Callable, None] = None,
     overwrite: bool = False,
 ) -> None:
-
+    """ New minimize for benchmark study """
     # optimizer
     if optimizer is None: optimizer = ScipyOptimizer()
 
@@ -91,30 +93,22 @@ def minimize_new(
     max_parallel_tasks = MPI.COMM_WORLD.Get_size()
 
     results = []
-    # Create an MPIPoolExecutor for managing worker processes
     with MPIPoolExecutor(max_workers=max_parallel_tasks) as executor:
         futures = []
         task_idx = 0
 
-        # Submit the first 16 tasks to start the process
         for _ in range(min(max_parallel_tasks, total_tasks)):
             task = create_task(task_idx, optimizer, problem, startpoints, ids, history_options, options)
             futures.append(executor.submit(task.execute))
             task_idx += 1
 
-        # Keep track of how many tasks have completed
         completed_tasks = 0
 
-        # As tasks complete, dynamically submit new ones until all tasks are submitted
         while completed_tasks < total_tasks:
             for future in as_completed(futures):
-                # Remove the completed future from the active list
                 futures.remove(future)
-
-                # Collect result if needed (you can remove this if results aren't needed)
                 result = future.result()
                 results.append(result)
-
                 completed_tasks += 1
 
                 if task_idx < total_tasks:
