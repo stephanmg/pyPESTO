@@ -20,6 +20,7 @@ from .load import (
     read_results_from_file,
 )
 from .optimize import minimize
+from .optimize import minimize_new
 from .optimizer import (
     CmaOptimizer,
     DlibOptimizer,
