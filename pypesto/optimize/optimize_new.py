@@ -35,7 +35,7 @@ def create_task(task_id, optimizer, problem, startpoints, ids, history_options, 
         )
 
 
-def minimize(
+def minimize_new(
     problem: Problem,
     optimizer: Optimizer = None,
     n_starts: int = 100,
