@@ -545,3 +545,6 @@ class Hdf5History(HistoryBase):
             history._f = None
 
         return history
+
+# TODO: Temporary change to this file, should go to optimize script for benchmark and override there
+Hdf5History._simulation_to_values  = staticmethod(lambda x, result, used_time: { X: x, FVAL: result[FVAL], TIME: used_time })

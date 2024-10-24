@@ -247,3 +247,10 @@ class CsvAmiciHistory(CsvHistory):
         values. If only a single value is requested, the list is flattened.
         """
         return list(self._trace[(POSTEQ_CPU_TIME_BACKWARD, np.nan)].values[ix])
+
+# TODO: Temporary change to this file, should go to optimize script for benchmark and override there
+def simulation_to_values_override(x, result, used_time):
+        values = Hdf5History._simulation_to_values(x, result, used_time)
+        return values
+
+Hdf5AmiciHistory._simulation_to_values = staticmethod(lambda x, result, used_time: simulation_to_values_override(x, result, used_time))
