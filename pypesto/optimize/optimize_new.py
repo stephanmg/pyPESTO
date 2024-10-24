@@ -85,8 +85,10 @@ def minimize_new(
     # change to one hdf5 storage file per start if parallel and if hdf5
     history_file = history_options.storage_file
 
-    total_tasks = 20
-    max_parallel_tasks = 6
+    # number of starts in total, probably rather high
+    total_tasks = n_starts
+    # limit to specified number of processes, thus one task per proc always running
+    max_parallel_tasks = MPI.COMM_WORLD.Get_size()
 
     results = []
     # Create an MPIPoolExecutor for managing worker processes
@@ -96,7 +98,8 @@ def minimize_new(
 
         # Submit the first 16 tasks to start the process
         for _ in range(min(max_parallel_tasks, total_tasks)):
-            futures.append(executor.submit(process_task, task_idx))
+            task = create_task(task_idx, optimizer, problem, startpoints, ids, history_options, options)
+            futures.append(executor.submit(task.execute))
             task_idx += 1
 
         # Keep track of how many tasks have completed
@@ -116,7 +119,7 @@ def minimize_new(
 
                 if task_idx < total_tasks:
                     # Submit a new task as soon as one finishes
-                    task = create_task(task_idx)
+                    task = create_task(task_idx, optimizer, problem, startpoints, ids, history_options, options)
                     futures.append(executor.submit(task.execute))
                     task_idx += 1
 
