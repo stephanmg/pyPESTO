@@ -337,7 +337,7 @@ class Hdf5History(HistoryBase):
         used_time = time.time() - self.start_time
 
         values = self._simulation_to_values(x, result, used_time)
-        if values[FVAL] > CURRENT_BEST_FVAL:
+        if values[FVAL] > self.CURRENT_BEST_FVAL:
             pass
         else:
             iteration = self._require_group().attrs[N_ITERATIONS]
@@ -347,7 +347,7 @@ class Hdf5History(HistoryBase):
                     self._require_group()[f"{iteration}/{key}"] = values[key]
 
             self._require_group().attrs[N_ITERATIONS] += 1
-            CURRENT_BEST_FVAL = values[FVAL]
+            self.CURRENT_BEST_FVAL = values[FVAL]
 
     @with_h5_file("r")
     def _get_group(self) -> h5py.Group:
