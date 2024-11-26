@@ -89,6 +89,7 @@ def minimize_new(
 
     # number of starts in total, probably rather high
     total_tasks = n_starts
+
     # limit to specified number of processes, thus one task per proc always running
     max_parallel_tasks = MPI.COMM_WORLD.Get_size()
 

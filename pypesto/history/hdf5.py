@@ -114,6 +114,7 @@ class Hdf5History(HistoryBase):
         super().__init__(options=options)
         self.id: str = id
         self.file: str = str(file)
+        self.CURRENT_BEST_FVAL = np.inf
 
         # filled during file access
         self._f: Union[h5py.File, None] = None
@@ -336,14 +337,17 @@ class Hdf5History(HistoryBase):
         used_time = time.time() - self.start_time
 
         values = self._simulation_to_values(x, result, used_time)
+        if values[FVAL] > CURRENT_BEST_FVAL:
+            pass
+        else:
+            iteration = self._require_group().attrs[N_ITERATIONS]
 
-        iteration = self._require_group().attrs[N_ITERATIONS]
+            for key in values.keys():
+                if values[key] is not None:
+                    self._require_group()[f"{iteration}/{key}"] = values[key]
 
-        for key in values.keys():
-            if values[key] is not None:
-                self._require_group()[f"{iteration}/{key}"] = values[key]
-
-        self._require_group().attrs[N_ITERATIONS] += 1
+            self._require_group().attrs[N_ITERATIONS] += 1
+            CURRENT_BEST_FVAL = values[FVAL]
 
     @with_h5_file("r")
     def _get_group(self) -> h5py.Group:
