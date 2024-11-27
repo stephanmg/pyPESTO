@@ -337,7 +337,7 @@ class Hdf5History(HistoryBase):
         used_time = time.time() - self.start_time
 
         values = self._simulation_to_values(x, result, used_time)
-        if values[FVAL] > self.CURRENT_BEST_FVAL:
+        if abs(values[FVAL]-self.CURRENT_BEST_FVAL) < 1e-6: # do not record a not much changed fval anymore
             pass
         else:
             iteration = self._require_group().attrs[N_ITERATIONS]
