@@ -1,10 +1,12 @@
 import logging
 from collections.abc import Iterable
+import h5py
 from typing import Callable, Union
 from warnings import warn
 from mpi4py.futures import MPIPoolExecutor
 from concurrent.futures import as_completed
 import time
+import numpy as np
 from mpi4py import MPI
 
 from ..engine import Engine, SingleCoreEngine
@@ -36,6 +38,15 @@ def create_task(task_id, optimizer, problem, startpoints, ids, history_options, 
             optimize_options=options,
         )
 
+
+def save_result_to_hdf5(result, task_idx, filename="results.h5"):
+    with h5py.File(filename, "a") as f:
+        group_name = f"result_{task_idx}"
+        grp = f.create_group(group_name)
+
+        # Example: result is a dict of arrays
+        for key, value in result.items():
+            grp.create_dataset(key, data=value)
 
 def minimize_new(
     problem: Problem,
@@ -92,6 +103,7 @@ def minimize_new(
     # limit to specified number of processes, thus one task per proc always running
     max_parallel_tasks = MPI.COMM_WORLD.Get_size()
 
+    buffered_results = []
     results = []
     with MPIPoolExecutor(max_workers=max_parallel_tasks) as executor:
         futures = []
@@ -108,7 +120,9 @@ def minimize_new(
             for future in as_completed(futures):
                 futures.remove(future)
                 result = future.result()
-                results.append(result)
+                print(dir(result))
+                #results.append(result)
+                buffered_results.append((completed_tasks, result))
                 completed_tasks += 1
 
                 if task_idx < total_tasks:
@@ -117,7 +131,33 @@ def minimize_new(
                     futures.append(executor.submit(task.execute))
                     task_idx += 1
 
+
+                # Collect if necessary
+                if completed_tasks % 4 == 0:
+                   print("saving?")
+                   if MPI.COMM_WORLD.Get_rank() == 0:
+                      with h5py.File("results.h5", "a") as f:
+                           for task_idx, res in buffered_results:
+                                group_name = f"result_{task_idx}"
+                                grp = f.create_group(group_name)
+                                fvals, time, x, grad = res.history.get_fval_trace(), res.history.get_time_trace(), res.history.get_x_trace(), res.history.get_grad_trace()
+                                
+                                mask = np.isfinite(fvals)
+                                fvals = np.array(fvals)[mask]
+                                time = np.array(time)[mask]
+                                x = np.array(x)[mask]
+                                
+                                grp.create_dataset("fval", data=np.array(fvals))
+                                grp.create_dataset("time", data=np.array(time))
+                                grp.create_dataset("x", data=np.array(x))
+
+                      buffered_results.clear()  # reset buffer after saving
+                      #with open("my_results.csv", "a") as f:
+                      #  f.write(f"{completed_tasks}\n")
+
+
                 # Break to allow immediate check of task completions
                 break
+                        
 
         print(f"All {total_tasks} tasks completed.")
