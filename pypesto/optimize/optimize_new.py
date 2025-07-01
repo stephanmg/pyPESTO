@@ -113,11 +113,13 @@ def minimize_new(
                 buffered_results.append((completed_tasks, result))
                 completed_tasks += 1
 
+                # Submit new tasks until number of total multi starts reached 
                 if task_idx < total_tasks:
                     task = create_task(task_idx, optimizer, problem, startpoints, ids, history_options, options)
                     futures.append(executor.submit(task.execute))
                     task_idx += 1
 
+                # Periodically write out results, default: every result (as specified by interval)
                 if completed_tasks % interval == 0:
                    if MPI.COMM_WORLD.Get_rank() == 0:
                       with h5py.File(filename, "a") as f:
@@ -134,11 +136,13 @@ def minimize_new(
                                 grp.create_dataset("fval", data=np.array(fvals))
                                 grp.create_dataset("time", data=np.array(time))
                                 grp.create_dataset("x", data=np.array(x))
+                                grp.create_dataset("n_fval", data=res.history.n_fval)
+                                grp.create_dataset("n_grad", data=res.history.n_grad)
+                                grp.create_dataset("start_time", data=res.history.start_time)
                         
-                      buffered_results.clear()  # reset buffer after saving
+                      buffered_results.clear()
 
-                # Break to allow immediate check of task completions
+                # Allow immediate check of task completions
                 break
-                        
 
         print(f"All {total_tasks} tasks completed.")
