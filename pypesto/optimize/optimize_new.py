@@ -140,44 +140,49 @@ def minimize_new(
 
         completed_tasks = 0
 
-
+        start_time = time.time()
         if optimizer.supports_maxtime():
             optimizer.set_maxtime(wall_time_limit)
 
         while completed_tasks < total_tasks:
+            if not futures: break
             for future in as_completed(futures):
                 futures.remove(future)
                 result = future.result()
                 buffered_results.append((completed_tasks, result))
                 completed_tasks += 1
 
+                current_time = time.time()
+                remaining = max(0.0, wall_time_limit - (current_time - start_time))
+                optimizer.set_maxtime(remaining)
+
                 # Submit new tasks until number of total multi starts reached 
-                if task_idx < total_tasks:
+                if task_idx < total_tasks and remaining > 0:
                     task = create_task(task_idx, optimizer, problem, startpoints, ids, history_options, options)
                     futures.append(executor.submit(task.execute))
                     task_idx += 1
 
-                 # Periodically write out results, default: every result (as specified by interval)
+                # Periodically write out results, default: every result (as specified by interval)
                 if completed_tasks % interval == 0:
                    if MPI.COMM_WORLD.Get_rank() == 0:
                       with h5py.File(filename, "a") as f:
                            for task_idx, res in buffered_results:
                                 group_name = f"result_{task_idx}"
                                 grp = f.create_group(group_name)
-                                fvals, time, x, grad = res.history.get_fval_trace(), res.history.get_time_trace(), res.history.get_x_trace(), res.history.get_grad_trace()
+                                fvals, times, x, grad = res.history.get_fval_trace(), res.history.get_time_trace(), res.history.get_x_trace(), res.history.get_grad_trace()
                                 
                                 mask = np.isfinite(fvals)
                                 fvals = np.array(fvals)[mask]
-                                time = np.array(time)[mask]
+                                times = np.array(times)[mask]
                                 x = np.array(x)[mask]
                                 
                                 grp.create_dataset("fval", data=np.array(fvals))
-                                grp.create_dataset("time", data=np.array(time))
+                                grp.create_dataset("time", data=np.array(times))
                                 grp.create_dataset("x", data=np.array(x))
                                 grp.create_dataset("n_fval", data=res.history.n_fval)
                                 grp.create_dataset("n_grad", data=res.history.n_grad)
                                 grp.create_dataset("start_time", data=res.history.start_time)
-                                grp.create_dataset("end_time", data=res.history.start_time + time[-1])
+                                grp.create_dataset("end_time", data=res.history.start_time + times[-1])
                                 
                         
                       buffered_results.clear()
