@@ -3,7 +3,7 @@ from collections.abc import Iterable
 import h5py
 from typing import Callable, Union
 from warnings import warn
-from mpi4py.futures import MPIPoolExecutor
+from mpi4py.futures import MPIPoolExecutor, MPICommExecutor
 from concurrent.futures import as_completed
 import time
 import numpy as np
@@ -24,6 +24,10 @@ from .util import (
     postprocess_hdf5_history,
     preprocess_hdf5_history,
 )
+
+from numbers import Integral
+
+from pypesto.store.hdf5 import write_array
 
 
 from pypesto.store import ProblemHDF5Writer
@@ -98,7 +102,33 @@ def minimize_new(
 
     buffered_results = []
     results = []
-    with MPIPoolExecutor(max_workers=max_parallel_tasks) as executor:
+
+    # Write problem once
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    if rank == 0:
+        with h5py.File(filename, "a") as f:
+            attrs_to_save = [
+                a
+                for a in dir(problem)
+                if not a.startswith("__")
+                and not callable(getattr(problem, a))
+                and not hasattr(type(problem), a)
+            ]
+
+            problem_grp = f.create_group("problem")
+            f["problem/config"] = str(problem.objective.get_config())
+
+            for problem_attr in attrs_to_save:
+                value = getattr(problem, problem_attr)
+                if isinstance(value, (list, np.ndarray)):
+                    value = np.asarray(value)
+                    if value.size:
+                        write_array(problem_grp, problem_attr, value)
+                elif isinstance(value, (Integral, str)):
+                    problem_grp.attrs[problem_attr] = value
+
+    with MPICommExecutor(max_workers=max_parallel_tasks) as executor:
         futures = []
         task_idx = 0
 
@@ -108,6 +138,8 @@ def minimize_new(
             task_idx += 1
 
         completed_tasks = 0
+
+
 
         while completed_tasks < total_tasks:
             for future in as_completed(futures):
@@ -122,14 +154,7 @@ def minimize_new(
                     futures.append(executor.submit(task.execute))
                     task_idx += 1
 
-                # Write problem
-                with h5py.File(filename, "a") as f:
-                    group_name = "/problem"
-                    grp = f.create_group(group_name)
-                    problem_writer = ProblemHDF5Writer(f)
-                    problem_writer.write(problem)
-
-                # Periodically write out results, default: every result (as specified by interval)
+                 # Periodically write out results, default: every result (as specified by interval)
                 if completed_tasks % interval == 0:
                    if MPI.COMM_WORLD.Get_rank() == 0:
                       with h5py.File(filename, "a") as f:
@@ -149,6 +174,7 @@ def minimize_new(
                                 grp.create_dataset("n_fval", data=res.history.n_fval)
                                 grp.create_dataset("n_grad", data=res.history.n_grad)
                                 grp.create_dataset("start_time", data=res.history.start_time)
+                                grp.create_dataset("end_time", data=res.history.start_time + time[-1])
                                 
                         
                       buffered_results.clear()
