@@ -25,6 +25,9 @@ from .util import (
     preprocess_hdf5_history,
 )
 
+
+from pypesto.store import ProblemHDF5Writer
+
 logger = logging.getLogger(__name__)
 
 def create_task(task_id, optimizer, problem, startpoints, ids, history_options, options):
@@ -119,6 +122,13 @@ def minimize_new(
                     futures.append(executor.submit(task.execute))
                     task_idx += 1
 
+                # Write problem
+                with h5py.File(filename, "a") as f:
+                    group_name = "/problem"
+                    grp = f.create_group(group_name)
+                    problem_writer = ProblemHDF5Writer(f)
+                    problem_writer.write(problem)
+
                 # Periodically write out results, default: every result (as specified by interval)
                 if completed_tasks % interval == 0:
                    if MPI.COMM_WORLD.Get_rank() == 0:
@@ -139,6 +149,7 @@ def minimize_new(
                                 grp.create_dataset("n_fval", data=res.history.n_fval)
                                 grp.create_dataset("n_grad", data=res.history.n_grad)
                                 grp.create_dataset("start_time", data=res.history.start_time)
+                                
                         
                       buffered_results.clear()
 
