@@ -238,6 +238,8 @@ class RelativeInnerSolver(InnerSolver):
         """
         sim = [rdata["y"] for rdata in rdatas]
         sigma = [rdata["sigmay"] for rdata in rdatas]
+        inner_parameters = copy.deepcopy(inner_parameters)
+        inner_parameters = scale_back_value_dict(inner_parameters, problem)
 
         # apply offsets, scalings and sigmas
         for x in problem.get_xs_for_type(InnerParameterType.SCALING):
@@ -310,14 +312,14 @@ class AnalyticalInnerSolver(RelativeInnerSolver):
 
                 # calculate the optimal coupled scaling
                 coupled_scaling = x.coupled
-                x_opt[
-                    coupled_scaling.inner_parameter_id
-                ] = compute_optimal_scaling(
-                    data=data,
-                    sim=sim,
-                    sigma=sigma,
-                    mask=coupled_scaling.ixs,
-                    optimal_offset=x_opt[x.inner_parameter_id],
+                x_opt[coupled_scaling.inner_parameter_id] = (
+                    compute_optimal_scaling(
+                        data=data,
+                        sim=sim,
+                        sigma=sigma,
+                        mask=coupled_scaling.ixs,
+                        optimal_offset=x_opt[x.inner_parameter_id],
+                    )
                 )
 
                 # check whether they both satisfy their bounds

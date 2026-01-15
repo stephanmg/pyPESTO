@@ -36,12 +36,13 @@ class PetabImportTest(unittest.TestCase):
         cls.obj_edatas = []
 
     def test_0_import(self):
-        for model_name in ["Zheng_PNAS2012", "Boehm_JProteomeRes2014"]:
+        for model_name in [
+            "Zheng_PNAS2012",
+            "Boehm_JProteomeRes2014",
+            "Weber_BMC2015",
+        ]:
             # test yaml import for one model:
-            yaml_config = os.path.join(
-                models.MODELS_DIR, model_name, model_name + ".yaml"
-            )
-            petab_problem = petab.Problem.from_yaml(yaml_config)
+            petab_problem = models.get_problem(model_name)
             self.petab_problems.append(petab_problem)
 
     def test_1_compile(self):
@@ -127,8 +128,10 @@ class PetabImportTest(unittest.TestCase):
         )
         objective.amici_solver.setAbsoluteTolerance(1e-10)
         objective.amici_solver.setRelativeTolerance(1e-12)
+        # enable least squares solver with residual mode
+        objective.amici_model.setAddSigmaResiduals(True)
 
-        self.assertFalse(
+        self.assertTrue(
             objective.check_gradients_match_finite_differences(
                 multi_eps=[1e-3, 1e-4, 1e-5]
             )

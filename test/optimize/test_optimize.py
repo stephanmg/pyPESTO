@@ -18,15 +18,19 @@ from numpy.testing import assert_almost_equal
 
 import pypesto
 import pypesto.optimize as optimize
+from pypesto import Objective
 from pypesto.optimize.ess import (
+    ESSExitFlag,
     ESSOptimizer,
     FunctionEvaluatorMP,
     RefSet,
     SacessFidesFactory,
+    SacessIpoptFactory,
     SacessOptimizer,
     SacessOptions,
     get_default_ess_options,
 )
+from pypesto.optimize.ess.sacess import SacessCmaFactory
 from pypesto.optimize.util import (
     assign_ids,
 )
@@ -308,6 +312,7 @@ def check_minimize(problem, library, solver, allow_failed_starts=False):
     ]:
         assert np.isfinite(result.optimize_result.list[0]["fval"])
         assert result.optimize_result.list[0]["x"] is not None
+        assert result.optimize_result.list[0]["optimizer"] is not None
 
 
 def test_trim_results(problem):
@@ -459,7 +464,13 @@ def test_history_beats_optimizer():
 @pytest.mark.parametrize("ess_type", ["ess", "sacess"])
 @pytest.mark.parametrize(
     "local_optimizer",
-    [None, optimize.FidesOptimizer(), SacessFidesFactory()],
+    [
+        None,
+        optimize.FidesOptimizer(),
+        SacessFidesFactory(),
+        SacessCmaFactory(),
+        SacessIpoptFactory(),
+    ],
 )
 @pytest.mark.flaky(reruns=3)
 def test_ess(problem, local_optimizer, ess_type, request):
@@ -489,7 +500,7 @@ def test_ess(problem, local_optimizer, ess_type, request):
         for x in ess_init_args:
             x["local_optimizer"] = local_optimizer
         ess = SacessOptimizer(
-            max_walltime_s=1,
+            max_walltime_s=4,
             sacess_loglevel=logging.DEBUG,
             ess_loglevel=logging.WARNING,
             ess_init_args=ess_init_args,
@@ -499,12 +510,14 @@ def test_ess(problem, local_optimizer, ess_type, request):
                 adaptation_sent_coeff=5,
             ),
         )
+
     else:
         raise ValueError(f"Unsupported ESS type {ess_type}.")
 
     res = ess.minimize(
         problem=problem,
     )
+    assert ess.exit_flag in (ESSExitFlag.MAX_TIME, ESSExitFlag.MAX_ITER)
     print("ESS result: ", res.summary())
 
     # best values roughly: cr: 4.701; rosen 7.592e-10
@@ -569,12 +582,73 @@ def test_ess_multiprocess(problem, request):
     print("ESS result: ", res.summary())
 
 
+def test_sacess_adaptation(capsys):
+    """Test that adaptation step of the SACESS optimizer succeeds."""
+    obj = rosen_for_sensi(max_sensi_order=2, integrated=False)["obj"]
+    lb = 0 * np.ones((1, 10))
+    ub = 1 * np.ones((1, 10))
+    problem = pypesto.Problem(objective=obj, lb=lb, ub=ub)
+
+    ess_init_args = get_default_ess_options(
+        num_workers=2, dim=problem.dim, local_optimizer=False
+    )
+    ess = SacessOptimizer(
+        max_walltime_s=2,
+        sacess_loglevel=logging.DEBUG,
+        ess_loglevel=logging.DEBUG,
+        ess_init_args=ess_init_args,
+        options=SacessOptions(
+            # trigger frequent adaptation
+            # - don't do that in production
+            adaptation_min_evals=0,
+            adaptation_sent_offset=0,
+            adaptation_sent_coeff=0,
+        ),
+    )
+    ess.minimize(problem)
+    assert "Updated settings on worker" in capsys.readouterr().err
+
+
 def test_ess_refset_repr():
     assert RefSet(10, None).__repr__() == "RefSet(dim=10)"
     assert (
         RefSet(10, None, x=np.zeros(10), fx=np.arange(10)).__repr__()
         == "RefSet(dim=10, fx=[0 ... 9])"
     )
+
+
+class FunctionOrError:
+    """Callable that raises an error every nth invocation."""
+
+    def __init__(self, fun, error_frequency=100):
+        self.counter = 0
+        self.error_frequency = error_frequency
+        self.fun = fun
+
+    def __call__(self, *args, **kwargs):
+        self.counter += 1
+        if self.counter % self.error_frequency == 0:
+            raise RuntimeError("Intentional error.")
+        return self.fun(*args, **kwargs)
+
+
+def test_sacess_worker_error(capsys):
+    """Check that SacessOptimizer does not hang if an error occurs on a worker."""
+    objective = Objective(
+        fun=FunctionOrError(sp.optimize.rosen), grad=sp.optimize.rosen_der
+    )
+    problem = pypesto.Problem(
+        objective=objective, lb=0 * np.ones((1, 2)), ub=1 * np.ones((1, 2))
+    )
+    sacess = SacessOptimizer(
+        num_workers=2,
+        max_walltime_s=2,
+        sacess_loglevel=logging.DEBUG,
+        ess_loglevel=logging.DEBUG,
+    )
+    res = sacess.minimize(problem)
+    assert isinstance(res, pypesto.Result)
+    assert "Intentional error." in capsys.readouterr().err
 
 
 def test_scipy_integrated_grad():
@@ -650,7 +724,7 @@ def test_correct_startpoint_usage(optimizer):
 
     opt = get_optimizer(*optimizer)
     # return if the optimizer knowingly does not support x_guesses
-    if not opt.check_x0_support():
+    if not opt.check_x0_support(np.array([0.1, 0.1])):
         return
 
     # define a problem with an x_guess
@@ -707,3 +781,50 @@ def test_assign_ids():
 
     ids = assign_ids(n_starts=n_starts, ids=None, result=result)
     assert ids == [str(i) for i in range(n_starts, n_starts * 2)]
+
+
+def test_cma_no_outcmaes_directory():
+    """Test that CmaOptimizer does not create outcmaes/ directory by default."""
+    # Create a simple test problem
+    obj = rosen_for_sensi(max_sensi_order=2, integrated=False)["obj"]
+    lb = 0 * np.ones((1, 2))
+    ub = 1 * np.ones((1, 2))
+    problem = pypesto.Problem(objective=obj, lb=lb, ub=ub)
+
+    # Create optimizer with default options
+    optimizer = optimize.CmaOptimizer()
+
+    # Get current working directory to check for outcmaes/
+    import tempfile
+
+    # Run in a temporary directory to avoid polluting the test directory
+    with tempfile.TemporaryDirectory() as tmpdir:
+        original_dir = os.getcwd()
+        try:
+            os.chdir(tmpdir)
+
+            # Run optimization with very few iterations
+            result = pypesto.optimize.minimize(
+                problem=problem,
+                optimizer=optimizer,
+                n_starts=1,
+                progress_bar=False,
+            )
+
+            # Verify optimization ran successfully
+            assert result is not None
+            assert len(result.optimize_result.list) == 1
+
+            # Check that outcmaes/ directory was NOT created
+            assert not os.path.exists("outcmaes"), (
+                "outcmaes/ directory should not be created with default options"
+            )
+
+            # Also check that no cmaes-related files were created
+            files_in_dir = os.listdir(".")
+            assert len(files_in_dir) == 0, (
+                f"No files should be created, found: {files_in_dir}"
+            )
+
+        finally:
+            os.chdir(original_dir)

@@ -56,6 +56,7 @@ def minimize_new(
     history_options: HistoryOptions = None,
     filename: Union[str, Callable, None] = None,
     interval: int = 1,
+    wall_time_limit: int = 1
 ) -> None:
     """ New minimize for benchmark study """
     # optimizer
@@ -140,6 +141,8 @@ def minimize_new(
         completed_tasks = 0
 
 
+        if optimizer.supports_maxtime():
+            optimizer.set_maxtime(wall_time_limit)
 
         while completed_tasks < total_tasks:
             for future in as_completed(futures):
