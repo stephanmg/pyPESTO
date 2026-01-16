@@ -56,7 +56,7 @@ def minimize_new(
     history_options: HistoryOptions = None,
     filename: Union[str, Callable, None] = None,
     interval: int = 1,
-    wall_time_limit: int = 1
+    wall_time_limit: float = None
 ) -> None:
     """ New minimize for benchmark study """
     # optimizer
@@ -123,8 +123,9 @@ def minimize_new(
         completed_tasks = 0
 
         start_time = time.time()
-        if optimizer.supports_maxtime():
-            optimizer.set_maxtime(wall_time_limit)
+        if wall_time_limit:
+           if optimizer.supports_maxtime():
+               optimizer.set_maxtime(wall_time_limit)
 
         while completed_tasks < total_tasks:
             if not futures: break
@@ -134,9 +135,10 @@ def minimize_new(
                 buffered_results.append((completed_tasks, result))
                 completed_tasks += 1
 
-                current_time = time.time()
-                remaining = max(0.0, wall_time_limit - (current_time - start_time))
-                optimizer.set_maxtime(remaining)
+                if wall_time_limit:
+                    current_time = time.time()
+                    remaining = max(0.0, wall_time_limit - (current_time - start_time))
+                    optimizer.set_maxtime(remaining)
 
                 # Submit new tasks until number of total multi starts reached 
                 if task_idx < total_tasks and remaining > 0:
