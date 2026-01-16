@@ -371,6 +371,8 @@ class ScipyOptimizer(Optimizer):
         if self.options is None:
             self.options = ScipyOptimizer.get_default_options(self)
         self.tol = tol
+        #: maximum walltime in seconds
+        self._maxtime_seconds: float | None = None
 
     def __repr__(self) -> str:
         rep = f"<{self.__class__.__name__} method={self.method}"
@@ -533,6 +535,20 @@ class ScipyOptimizer(Optimizer):
             if hessp is not None:
                 hess = None
 
+            # Set callback for handling timelimit if necessary
+            callback = None
+            if self._maxtime_seconds is not None and np.isfinite(
+                self._maxtime_seconds
+            ):
+                start_time = time.time()
+
+                def callback(*args, **kwargs):
+                    elapsed_time = time.time() - start_time
+                    if elapsed_time >= self._maxtime_seconds:
+                        raise StopIteration(
+                            f"Maximum time {self._maxtime_seconds}s exceeded."
+                        )
+
             # optimize
             res = scipy.optimize.minimize(
                 fun=fun,
@@ -544,6 +560,7 @@ class ScipyOptimizer(Optimizer):
                 bounds=bounds,
                 options=self.options,
                 tol=self.tol,
+                callback=callback,
             )
             # extract fval/grad from result
             grad = getattr(res, "jac", None)
@@ -582,6 +599,60 @@ class ScipyOptimizer(Optimizer):
 
         return options
 
+    def supports_maxiter(self) -> bool:
+        """Check whether optimizer supports iteration limits."""
+        return True
+
+    def set_maxiter(self, iterations: int) -> None:
+        """
+        Set the maximum number of iterations for optimization.
+
+        Parameters
+        ----------
+        iterations
+            Maximum number of iterations.
+        """
+        if self.options is None:
+            self.options = {}
+        if self.method.lower() == "tnc":
+            self.options["maxfun"] = iterations
+        else:
+            self.options["maxiter"] = iterations
+
+    def supports_maxtime(self) -> bool:
+        """
+        Check whether optimizer supports time limits.
+
+        Returns
+        -------
+        True if optimizer supports setting a maximum wall time,
+        False otherwise.
+        """
+        # TNC neither supports time limits nor callback functions
+        return self.method.lower() != "tnc"
+
+    def set_maxtime(self, seconds: float) -> None:
+        """
+        Set the maximum wall time for optimization.
+
+        Parameters
+        ----------
+        seconds
+            Maximum wall time in seconds.
+
+        Raises
+        ------
+        NotImplementedError
+            If the optimizer does not support time limits.
+        """
+        if not self.supports_maxtime():
+            raise NotImplementedError(
+                f"{self.__class__.__name__} method {self.method} does not "
+                "support time limits. "
+                f"Check supports_maxtime() before calling set_maxtime()."
+            )
+
+        self._maxtime_seconds = seconds
 
 class IpoptOptimizer(Optimizer):
     """Use Ipopt (https://pypi.org/project/cyipopt/) for optimization."""
