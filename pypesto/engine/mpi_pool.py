@@ -5,7 +5,7 @@ from typing import Any
 
 import cloudpickle as pickle
 from mpi4py import MPI
-from mpi4py.futures import MPICommExecutor
+from mpi4py.futures import MPIPoolExecutor
 
 from ..util import tqdm
 from .base import Engine
@@ -54,20 +54,8 @@ class MPIPoolEngine(Engine):
         n_procs = MPI.COMM_WORLD.Get_size()  # Size of communicator
         logger.info(f"Parallelizing on {n_procs-1} workers with one manager.")
 
-        with MPICommExecutor(MPI.COMM_WORLD) as executor:
-            if executor is None:
-                pass
-            else:
-                results = executor.map(
-                    work, tqdm(pickled_tasks, enable=progress_bar)
-                )
-                return results
-
-
-        #with MPICommExecutor(maxprocs=n_procs) as executor:
-        #    results = executor.map(
-        #        work, tqdm(pickled_tasks, enable=progress_bar)
-        #    )
-        
-        #try: return results
-        #except UnboundLocalError: pass
+        with MPIPoolExecutor() as executor:
+            results = executor.map(
+                work, tqdm(pickled_tasks, enable=progress_bar)
+            )
+        return results
