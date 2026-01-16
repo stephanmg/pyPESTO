@@ -27,56 +27,27 @@ class MPIPoolEngine(Engine):
     def __init__(self):
         super().__init__()
 
-    def work(self, pickled_task: bytes, remaining: float):
+    def work(self, pickled_task: bytes, global_start_time: float, wall_time_limit: float):
+        remaining = max(0.0, wall_time_limit - (time.time() - global_start_time))
+
         task = pickle.loads(pickled_task)
 
         if hasattr(task, "optimizer") and hasattr(task.optimizer, "supports_maxtime"):
-            task.optimizer.set_maxtime(max(0.0, remaining))
+            task.optimizer.set_maxtime(remaining)
 
         return task.execute()
 
     def execute(self, tasks, wall_time_limit: float, progress_bar=True) -> list[Any]:
-        start = time.time()
-        total = len(tasks)
+        global_start_time = time.time()
+        pickled_tasks = [pickle.dumps(task) for task in tasks]
 
-        max_in_flight = 11
+        with MPIPoolExecutor() as executor:
+            results_iter = executor.map(
+                self.work,
+                pickled_tasks,
+                [global_start_time] * len(pickled_tasks),
+                [wall_time_limit] * len(pickled_tasks)
+            )
+            results = list(tqdm(results_iter, total=len(tasks)))
 
-        with MPIPoolExecutor(max_workers=11) as ex:
-            futures = []
-            idx = 0
-
-            def remaining_time():
-                return wall_time_limit - (time.time() - start)
-
-            # submit initial batch
-            while idx < total and len(futures) < max_in_flight:
-                rem = remaining_time()
-                if rem <= 0:
-                    break
-                futures.append(ex.submit(self.work, pickle.dumps(tasks[idx]), rem))
-                idx += 1
-
-            results = []
-            pbar = tqdm(total=total, disable=not progress_bar)
-
-            # dynamic scheduling
-            while futures:
-                for fut in as_completed(futures):
-                    futures.remove(fut)
-                    results.append(fut.result())
-                    pbar.update(1)
-
-                    rem = remaining_time()
-                    if rem <= 0:
-                        # stop submitting new tasks; just drain what's running
-                        break
-
-                    if idx < total:
-                        futures.append(ex.submit(work, (pickle.dumps(tasks[idx]), rem)))
-                        idx += 1
-
-                    # allow “one completion at a time” (keeps loop responsive)
-                    break
-
-            pbar.close()
-            return results
+        return results
