@@ -56,6 +56,7 @@ def minimize_new(
     history_options: HistoryOptions = None,
     filename: Union[str, Callable, None] = None,
     interval: int = 1,
+    wall_time_limit: int = 1
 ) -> None:
     """ New minimize for benchmark study """
     # optimizer
@@ -121,20 +122,29 @@ def minimize_new(
 
         completed_tasks = 0
 
+        start_time = time.time()
+        if optimizer.supports_maxtime():
+            optimizer.set_maxtime(wall_time_limit)
+
         while completed_tasks < total_tasks:
+            if not futures: break
             for future in as_completed(futures):
                 futures.remove(future)
                 result = future.result()
                 buffered_results.append((completed_tasks, result))
                 completed_tasks += 1
 
+                current_time = time.time()
+                remaining = max(0.0, wall_time_limit - (current_time - start_time))
+                optimizer.set_maxtime(remaining)
+
                 # Submit new tasks until number of total multi starts reached 
-                if task_idx < total_tasks:
+                if task_idx < total_tasks and remaining > 0:
                     task = create_task(task_idx, optimizer, problem, startpoints, ids, history_options, options)
                     futures.append(executor.submit(task.execute))
                     task_idx += 1
 
-                 # Periodically write out results, default: every result (as specified by interval)
+                # Periodically write out results, default: every result (as specified by interval)
                 if completed_tasks % interval == 0:
                    if MPI.COMM_WORLD.Get_rank() == 0:
                       with h5py.File(filename, "a") as f:
