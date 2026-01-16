@@ -35,6 +35,7 @@ def minimize(
     history_options: HistoryOptions = None,
     filename: Union[str, Callable, None] = None,
     overwrite: bool = False,
+    wall_time_limit: int = 1, # in seconds
 ) -> Result:
     """
     Do multistart optimization.
@@ -140,6 +141,10 @@ def minimize(
     history_requires_postprocessing = preprocess_hdf5_history(
         history_options, engine
     )
+    
+    # set wall time limit for supported optimizers at beginning of execution
+    if optimizer.supports_maxtime():
+        optimizer.set_maxtime(wall_time_limit)
 
     # define tasks
     tasks = []
@@ -155,7 +160,7 @@ def minimize(
         tasks.append(task)
 
     # perform multistart optimization
-    ret = engine.execute(tasks, progress_bar=progress_bar)
+    ret = engine.execute(tasks, progress_bar=progress_bar, wall_time_limit=wall_time_limit)
 
     # Safe guard in case of error in parallel run (should never actually happen)
     if ret:
