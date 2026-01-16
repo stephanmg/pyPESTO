@@ -2,6 +2,7 @@ import logging
 
 import numpy as np
 from datetime import datetime
+import time
 from mpi4py import MPI
 import h5py
 import os.path
@@ -83,6 +84,7 @@ class OptimizerTask(Task):
                  grp = f.create_group(f'{counter}')
                  grp.attrs['time'] = datetime.timestamp(datetime.now()) - f[f'global_data'].attrs['init_timestamp']
                  grp.attrs['fval'] = init_fval
+                 grp.attrs['end_time'] = time.time()
                  grp.attrs['x'] = self.x0
  
              f[f'global_data'].attrs['n_runs'] += 1
@@ -107,6 +109,7 @@ class OptimizerTask(Task):
                  f[f'global_data'].attrs['best_fx'] = float(optimizer_result.fval)
                  grp = f.create_group(f'{counter}')
                  grp.attrs['time'] = datetime.timestamp(datetime.now()) - f[f'global_data'].attrs['init_timestamp']
+                 grp.attrs['end_time'] = time.time()
                  grp.attrs['fval'] = optimizer_result.fval
                  grp.attrs['x'] = optimizer_result.x
 
