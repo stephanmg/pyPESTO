@@ -136,9 +136,10 @@ def minimize_new(
                 completed_tasks += 1
 
                 if wall_time_limit:
-                    current_time = time.time()
-                    remaining = max(0.0, wall_time_limit - (current_time - start_time))
-                    optimizer.set_maxtime(remaining)
+                    if optimizer.supports_maxtime():
+                        current_time = time.time()
+                        remaining = max(0.0, wall_time_limit - (current_time - start_time))
+                        optimizer.set_maxtime(remaining)
 
                 # Submit new tasks until number of total multi starts reached 
                 if task_idx < total_tasks and remaining > 0:
