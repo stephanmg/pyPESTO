@@ -854,6 +854,14 @@ class CmaOptimizer(Optimizer):
             rep += f" options={self.options}"
         return rep + ">"
 
+    def supports_maxtime(self) -> bool:
+        """Check whether optimizer supports time limits."""
+        return True
+
+    def set_maxtime(self, seconds: float) -> None:
+        """Set the maximum wall time for optimization."""
+        self.options["timeout"] = seconds
+
     @minimize_decorator_collection
     def minimize(
         self,
