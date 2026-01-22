@@ -135,6 +135,8 @@ def minimize_new(
                 buffered_results.append((completed_tasks, result))
                 completed_tasks += 1
 
+                # if not supported walltime limit then we just continue always
+                remaining = wall_time_limit
                 if wall_time_limit:
                     if optimizer.supports_maxtime():
                         current_time = time.time()
