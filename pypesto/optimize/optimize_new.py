@@ -108,8 +108,12 @@ def minimize_new(
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     if rank == 0:
-        problem_writer = ProblemHDF5Writer(filename)
-        problem_writer.write(problem)
+        write_problem = False
+        with h5py.File(filename, "a") as f:
+            write_problem = ("problem/config" in f and isinstance(f["problem/config"], h5py.Group))
+        if write_problem:
+            problem_writer = ProblemHDF5Writer(filename)
+            problem_writer.write(problem)
 
     with MPICommExecutor(max_workers=max_parallel_tasks) as executor:
         futures = []
