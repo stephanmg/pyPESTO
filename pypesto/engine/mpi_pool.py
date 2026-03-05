@@ -35,7 +35,8 @@ class MPIPoolEngine(Engine):
         if hasattr(task, "optimizer") and hasattr(task.optimizer, "supports_maxtime"):
             task.optimizer.set_maxtime(remaining)
 
-        return task.execute()
+        # Only return work if we still have available wall time limit
+        if remaining != 0: return task.execute()
 
     def execute(self, tasks, wall_time_limit: float, progress_bar=True) -> list[Any]:
         global_start_time = time.time()
