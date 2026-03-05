@@ -33,9 +33,10 @@ class MPIPoolEngine(Engine):
         task = pickle.loads(pickled_task)
 
         if hasattr(task, "optimizer") and hasattr(task.optimizer, "supports_maxtime"):
-            task.optimizer.set_maxtime(remaining)
+            if optimizer.supports_maxtime():
+               task.optimizer.set_maxtime(remaining)
 
-        # Only return work if we still have available wall time limit
+        # Only return work if we still have available wall time
         if remaining != 0: return task.execute()
 
     def execute(self, tasks, wall_time_limit: float, progress_bar=True) -> list[Any]:
