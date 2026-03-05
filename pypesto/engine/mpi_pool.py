@@ -33,7 +33,7 @@ class MPIPoolEngine(Engine):
         task = pickle.loads(pickled_task)
 
         if hasattr(task, "optimizer") and hasattr(task.optimizer, "supports_maxtime"):
-            if optimizer.supports_maxtime():
+            if task.optimizer.supports_maxtime():
                task.optimizer.set_maxtime(remaining)
 
         # Only return work if we still have available wall time
