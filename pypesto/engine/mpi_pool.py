@@ -35,6 +35,9 @@ class MPIPoolEngine(Engine):
         if hasattr(task, "optimizer") and hasattr(task.optimizer, "supports_maxtime"):
             if task.optimizer.supports_maxtime():
                task.optimizer.set_maxtime(remaining)
+            else:
+                # In case optimizer does not support walltime limit, keep going
+                return task.execute()
 
         # Only return work if we still have available wall time
         if remaining != 0: return task.execute()
