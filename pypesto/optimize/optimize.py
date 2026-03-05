@@ -164,25 +164,29 @@ def minimize(
 
     # Safe guard in case of error in parallel run (should never actually happen)
     if ret:
-        # merge hdf5 history files
-        if history_requires_postprocessing:
-            postprocess_hdf5_history(ret, history_file, history_options)
+        try:
+            # merge hdf5 history files
+            if history_requires_postprocessing:
+                postprocess_hdf5_history(ret, history_file, history_options)
 
-        # aggregate results
-        for optimizer_result in ret:
-            result.optimize_result.append(optimizer_result)
+            # aggregate results
+            for optimizer_result in ret:
+                result.optimize_result.append(optimizer_result)
 
-        # sort by best fval
-        result.optimize_result.sort()
+            # sort by best fval
+            result.optimize_result.sort()
 
-        # if history file provided, set storage file to that one
-        if filename == "Auto" and history_file is not None:
-            filename = history_file
-        autosave(
-            filename=filename,
-            result=result,
-            store_type="optimize",
-            overwrite=overwrite,
-        )
+            # if history file provided, set storage file to that one
+            if filename == "Auto" and history_file is not None:
+                filename = history_file
+            autosave(
+                filename=filename,
+                result=result,
+                store_type="optimize",
+                overwrite=overwrite,
+            )
+        except ValueError:
+            # Might happen when no further tasks are executed due to max walltime limit for optimizer
+            pass
 
     return result
